@@ -69,3 +69,27 @@ def test_strip_other_formatting_keeps_attributed_kept_kind() -> None:
     # The kept kind's tags must survive with their attributes: MarkColorRule reads them.
     text = '<mark style="background-color:#ffff00"><u class="a">word</u></mark>'
     assert _strip_other_formatting(text, "mark") == '<mark style="background-color:#ffff00">word</mark>'
+
+
+QUOTED_GT = '<mark title="A > B">Hello</mark>'
+
+
+def test_quoted_gt_in_attribute_normalize_cell_text() -> None:
+    assert normalize_cell_text(QUOTED_GT) == "Hello"
+
+
+def test_quoted_gt_in_attribute_normalize_text() -> None:
+    assert normalize_text(QUOTED_GT) == "hello"
+    assert normalize_text("<u title='x>y'>Hello</u>") == "hello"
+
+
+def test_quoted_gt_in_attribute_strip_other_formatting() -> None:
+    assert _strip_other_formatting('<b title="A > B">word</b>', "mark") == "word"
+
+
+@pytest.mark.parametrize("tag", ["mark-down", "b-x", "u-line", "del-note"])
+def test_custom_elements_survive(tag: str) -> None:
+    text = f"<{tag}>Title</{tag}>"
+    assert normalize_text(text) == text.lower()
+    assert normalize_cell_text(text) == text
+    assert _strip_other_formatting(text, "mark") == text
