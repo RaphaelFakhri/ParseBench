@@ -65,3 +65,23 @@ def test_adjacent_family_agrees_with_text_color(expected: str, value: str) -> No
     assert isinstance(text_rule, TextColorRule)
     text_ok, _ = text_rule.run(f'<span style="color:{value}">{TEXT}</span>')
     assert _run_mark(expected, f'style="background-color:{value}"') == text_ok
+
+
+def test_foreground_color_does_not_pass_highlight() -> None:
+    assert not _run_mark("yellow", 'style="background-color:#0000ff; color:#ffff00"')
+    assert not _run_mark("yellow", 'style="color:rgb(255,255,0)"')
+    assert _run_mark("yellow", 'style="color:#0000ff; background-color:#ffff00"')
+
+
+@pytest.mark.parametrize(
+    "attrs",
+    [
+        'background="gold"',
+        "background='gold'",
+        'style="background: gold"',
+        'backgroundColor="gold"',
+        'style="background-color:rgb(255, 215, 0)"',
+    ],
+)
+def test_named_and_shorthand_backgrounds_map_to_family(attrs: str) -> None:
+    assert _run_mark("yellow", attrs)
