@@ -545,3 +545,36 @@ def test_pass_rate_with_passed_total_keeps_the_rule_count_micro() -> None:
 
     assert summary["micro_extract_element_pass_rate"] == pytest.approx(0.5)
     assert summary["total_extract_element_pass_rate_tp"] == 1.0
+
+
+def test_parse_eval_loads_extract_annotated_layout_case_as_layout(tmp_path: Path) -> None:
+    """A test.json with data_schema (annotation_mode "extract") plus layout rules
+    must load as a layout case for parse runs; without the PARSE hint the loader
+    built an ExtractTestCase and the layout example was silently skipped."""
+    import json
+
+    group_dir = tmp_path / "cases" / "financial_reports"
+    group_dir.mkdir(parents=True)
+    (group_dir / "doc.pdf").write_bytes(b"%PDF-1.4\n")
+    rule = {
+        "type": "layout",
+        "id": "r1",
+        "page": 1,
+        "bbox": [0.1, 0.1, 0.5, 0.05],
+        "canonical_class": "Text",
+        "content": {"type": "text", "text": "hello"},
+        "attributes": {},
+    }
+    test_json = {
+        "annotation_mode": "extract",
+        "data_schema": {"type": "object", "properties": {}},
+        "test_rules": [rule],
+    }
+    (group_dir / "doc.test.json").write_text(json.dumps(test_json))
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    runner = EvaluationRunner(output_dir=output_dir, test_cases_dir=tmp_path / "cases")
+    summary = runner.run_evaluation(product_type="parse", use_rich=False)
+
+    assert [r.test_id for r in summary.per_example_results] == ["financial_reports/doc"]

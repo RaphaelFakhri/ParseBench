@@ -681,7 +681,7 @@ class EvaluationRunner:
             test_cases = load_test_cases(
                 root_dir=self.test_cases_dir,
                 require_test_json=False,
-                product_type=None if product_type == "parse" else product_type,
+                product_type=product_type,
             )
             # Filter by group if specified
             if group:
