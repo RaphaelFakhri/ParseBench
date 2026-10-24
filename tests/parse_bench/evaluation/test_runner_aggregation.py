@@ -578,3 +578,73 @@ def test_parse_eval_loads_extract_annotated_layout_case_as_layout(tmp_path: Path
     summary = runner.run_evaluation(product_type="parse", use_rich=False)
 
     assert [r.test_id for r in summary.per_example_results] == ["financial_reports/doc"]
+
+
+def test_parse_eval_scores_layout_and_extract_field_rules_on_one_page(tmp_path: Path) -> None:
+    """A page with data_schema, layout rules and extract_field rules must score both
+    families: loading it as a layout case raised ``Unknown parse rule type:
+    extract_field``, and loading it as an extract case dropped its layout metrics."""
+    import json
+    from datetime import datetime
+
+    from parse_bench.schemas.parse_output import (
+        LayoutItemIR,
+        LayoutSegmentIR,
+        PageIR,
+        ParseLayoutPageIR,
+        ParseOutput,
+    )
+    from parse_bench.schemas.pipeline_io import InferenceRequest, InferenceResult
+    from parse_bench.schemas.product import ProductType
+
+    group_dir = tmp_path / "cases" / "forms"
+    group_dir.mkdir(parents=True)
+    (group_dir / "doc.pdf").write_bytes(b"%PDF-1.4\n")
+    test_json = {
+        "data_schema": {"type": "object", "properties": {"name": {"type": "string"}}},
+        "expected_output": {"name": "Alpha"},
+        "test_rules": [
+            {"type": "layout", "id": "l1", "page": 1, "bbox": [0.1, 0.1, 0.2, 0.05], "canonical_class": "Text"},
+            {
+                "type": "extract_field",
+                "field_path": "name",
+                "expected_value": "Alpha",
+                "bboxes": [{"page": 1, "bbox": [0.1, 0.1, 0.2, 0.05]}],
+            },
+        ],
+    }
+    (group_dir / "doc.test.json").write_text(json.dumps(test_json))
+
+    now = datetime.now()
+    segment = LayoutSegmentIR(x=100.0, y=100.0, w=200.0, h=50.0, label="text", confidence=1.0)
+    item = LayoutItemIR(type="text", value="Alpha", bbox=segment, layout_segments=[segment])
+    output = ParseOutput(
+        example_id="forms/doc",
+        pipeline_name="llamaparse",
+        pages=[PageIR(page_index=0, markdown="Alpha")],
+        layout_pages=[ParseLayoutPageIR(page_number=1, width=1000.0, height=1000.0, md="Alpha", items=[item])],
+        markdown="Alpha",
+    )
+    result = InferenceResult(
+        request=InferenceRequest(example_id="forms/doc", source_file_path="doc.pdf", product_type=ProductType.PARSE),
+        pipeline_name="llamaparse",
+        product_type=ProductType.PARSE,
+        raw_output={},
+        output=output,
+        started_at=now,
+        completed_at=now,
+        latency_in_ms=1,
+    )
+    out_dir = tmp_path / "out" / "forms"
+    out_dir.mkdir(parents=True)
+    (out_dir / "doc.result.json").write_text(result.model_dump_json())
+
+    runner = EvaluationRunner(output_dir=tmp_path / "out", test_cases_dir=tmp_path / "cases")
+    summary = runner.run_evaluation(product_type="parse", use_rich=False)
+
+    assert len(summary.per_example_results) == 1
+    page = summary.per_example_results[0]
+    assert page.success, page.error
+    names = {metric.metric_name for metric in page.metrics}
+    assert "parse_field_gt_count" in names
+    assert any(not name.startswith("parse_field_") for name in names), names
